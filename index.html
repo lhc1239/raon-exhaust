@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>M ACTIVE SOUND PRO (E-Shift & OBD2/GPS)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Pretendard:wght@400;600;700;800&display=swap');
+    body {
+      background-color: #06080d;
+      color: #f8fafc;
+      font-family: 'Pretendard', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow-x: hidden;
+      touch-action: manipulation;
+    }
+    .font-digital { font-family: 'Orbitron', monospace; }
+    .m-stripes {
+      background: linear-gradient(90deg, #0066b1 0%, #0066b1 33%, #1c2541 33%, #1c2541 66%, #e4002b 66%, #e4002b 100%);
+    }
+    .gauge-track { stroke: #151a24; }
+    .gauge-fill { transition: stroke-dashoffset 0.04s linear, stroke 0.15s ease; }
+    .pop-flash { animation: popFlashAnim 0.1s ease-out; }
+    @keyframes popFlashAnim {
+      0% { box-shadow: inset 0 0 55px rgba(228, 0, 43, 0.85); }
+      100% { box-shadow: inset 0 0 0 rgba(228, 0, 43, 0); }
+    }
+  </style>
+</head>
+<body id="appBody" class="min-h-screen flex flex-col justify-between p-3 max-w-md mx-auto relative select-none">
+
+  <!-- 1. 최상단: 헤더 & 엔진 선택 -->
+  <header class="space-y-2">
+    <div class="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-2xl px-3 py-2 shadow-lg backdrop-blur">
+      <div class="flex items-center gap-2">
+        <div class="w-3.5 h-3.5 rounded m-stripes shadow-sm"></div>
+        <span class="font-digital font-black text-xs tracking-wider text-slate-100">M POWER DSP</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <label class="px-2 py-1 rounded-lg bg-slate-800 active:bg-slate-700 text-amber-400 border border-slate-700 text-[11px] font-bold cursor-pointer">
+          📂 실차음원
+          <input type="file" accept="audio/*,video/*" class="hidden" onchange="loadCustomSample(event)" />
+        </label>
+        <button onclick="copyGithubCode()" class="px-2 py-1 rounded-lg bg-slate-800 active:bg-slate-700 text-sky-400 border border-slate-700 text-[11px] font-bold">
+          📦 코드복사
+        </button>
+      </div>
+    </div>
+
+    <!-- 엔진 기종 선택 (S58 / B58 / V8) -->
+    <div class="grid grid-cols-3 gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800/80">
+      <button onclick="setEngine('S58')" id="btnS58" class="py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white transition">S58 (M2/M4)</button>
+      <button onclick="setEngine('B58')" id="btnB58" class="py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">B58 (M340i)</button>
+      <button onclick="setEngine('V8')" id="btnV8" class="py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">V8 8-SPEED</button>
+    </div>
+
+    <!-- 주행 입력 소스 모드 (GPS / OBD2 BLE / 다이노 시뮬레이션) -->
+    <div class="grid grid-cols-3 gap-1.5">
+      <button onclick="switchSourceMode('GPS')" id="tabGPS" class="py-2 rounded-xl text-xs font-bold bg-sky-600 text-white border border-sky-400/40 flex flex-col items-center justify-center">
+        <span>🛰️ GPS 실속도</span>
+        <span id="gpsPill" class="text-[9px] text-sky-200 opacity-90">대기중</span>
+      </button>
+      <button onclick="openOBDModal()" id="tabOBD" class="py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 border border-slate-800 flex flex-col items-center justify-center active:scale-95">
+        <span>📡 차량 OBD2</span>
+        <span id="obdPill" class="text-[9px] text-slate-400">기기 선택</span>
+      </button>
+      <button onclick="switchSourceMode('SIM')" id="tabSIM" class="py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 border border-slate-800 flex flex-col items-center justify-center">
+        <span>🎮 다이노 시뮬</span>
+        <span class="text-[9px] text-slate-400">정차 테스트</span>
+      </button>
+    </div>
+
+    <!-- 주행 드라이브 모드 셀렉터 (컴포트 / 스포츠 / 스포츠 플러스) -->
+    <div class="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
+      <span class="text-slate-400 font-bold text-[11px]">배기 모드:</span>
+      <div class="flex gap-1">
+        <button onclick="setDriveMode('COMFORT')" id="modeComfort" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-400">COMFORT</button>
+        <button onclick="setDriveMode('SPORT')" id="modeSport" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-400">SPORT</button>
+        <button onclick="setDriveMode('SPORT_PLUS')" id="modeSportPlus" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-red-600 text-white shadow-[0_0_12px_rgba(228,0,43,0.5)]">🔥 SPORT PLUS</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. 중앙 메인 클러스터 (RPM 게이지 & 기어 & 속도) -->
+  <main class="relative flex flex-col items-center justify-center my-auto py-2">
+    <!-- 시동 켜기 오버레이 버튼 -->
+    <div id="startCover" class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md rounded-3xl border border-slate-800/80 p-5 text-center">
+      <button onclick="startEngineAudio()" class="w-28 h-28 rounded-full bg-gradient-to-br from-red-600 via-red-700 to-red-950 border-4 border-red-400/50 shadow-[0_0_45px_rgba(228,0,43,0.7)] flex flex-col items-center justify-center active:scale-95 transition-transform">
+        <span class="font-digital text-xs tracking-widest text-red-200">START</span>
+        <span class="font-digital text-lg font-black text-white">ENGINE</span>
+        <span class="text-[9px] text-red-200 mt-0.5">사운드 켜기</span>
+      </button>
+      <p class="text-xs text-slate-400 mt-4 leading-relaxed">
+        터치하면 카플레이/블루투스 오디오 잠금이 해제되고<br><b class="text-slate-200">콜드스타트 배기음</b>과 함께 시동이 켜집니다.
+      </p>
+    </div>
+
+    <!-- 원형 계기판 SVG -->
+    <svg class="w-64 h-64 -rotate-90 drop-shadow-2xl" viewBox="0 0 240 240">
+      <circle cx="120" cy="120" r="100" stroke-width="14" fill="none" class="gauge-track" stroke-dasharray="471 628" stroke-linecap="round" />
+      <circle id="gaugeArc" cx="120" cy="120" r="100" stroke-width="14" fill="none" class="gauge-fill" stroke="#0066b1" stroke-dasharray="471 628" stroke-dashoffset="471" stroke-linecap="round" />
+    </svg>
+
+    <!-- 내부 정보 HUD -->
+    <div class="absolute flex flex-col items-center justify-center text-center">
+      <div class="flex items-baseline gap-1">
+        <span class="font-digital text-xl font-bold text-sky-400">M</span>
+        <span id="hudGear" class="font-digital text-7xl font-black text-white tracking-tighter">1</span>
+      </div>
+      <div class="mt-0.5">
+        <span id="hudRpm" class="font-digital text-2xl font-black text-slate-100 tracking-wider">0</span>
+        <span class="font-digital text-[10px] text-slate-400 block -mt-1 tracking-widest">RPM</span>
+      </div>
+      <div class="mt-2.5 px-3.5 py-1 rounded-full bg-slate-900/90 border border-slate-800 flex items-baseline gap-1.5 shadow-inner">
+        <span id="sourceTag" class="text-[10px] text-sky-400 font-bold">GPS</span>
+        <span id="hudSpeed" class="font-digital text-xl font-black text-amber-400">0</span>
+        <span class="text-[10px] text-slate-400 font-bold">KM/H</span>
+      </div>
+      <!-- 스로틀 게이지 바 -->
+      <div class="w-32 bg-slate-800 h-1.5 rounded-full mt-2.5 overflow-hidden border border-slate-700/50">
+        <div id="hudThrottle" class="bg-gradient-to-r from-sky-500 via-amber-400 to-red-500 h-full w-0 transition-all duration-75"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 3. 하단 컨트롤 패널 & 수동 패들시프트 -->
+  <footer class="space-y-2">
+    <!-- 시뮬레이션 모드 전용 가속/감속 페달 -->
+    <div id="simPedalBox" class="hidden bg-slate-900/95 border border-amber-500/40 rounded-2xl p-2.5 space-y-2 shadow-lg">
+      <div class="flex justify-between items-center text-xs px-1">
+        <span class="text-amber-400 font-bold">🎮 가상 다이노 주행</span>
+        <span class="text-[10px] text-slate-400">패드 RT 트리거 또는 누르고 있기</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <button id="simBrake" class="py-3 rounded-xl bg-slate-800 active:bg-red-950 border border-slate-700 text-slate-200 font-bold text-xs active:scale-95">
+          🛑 브레이크
+        </button>
+        <button id="simAccel" class="col-span-2 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-red-600 active:brightness-125 text-white font-black text-sm shadow-md active:scale-[0.98]">
+          🚀 풀 악셀 (HOLD)
+        </button>
+      </div>
+    </div>
+
+    <!-- 변속 조작 패들시프트 대형 버튼 -->
+    <div class="grid grid-cols-7 gap-2 items-center">
+      <button onpointerdown="triggerShiftDown()" class="col-span-3 py-4 rounded-2xl bg-slate-900 active:bg-red-950 border-2 border-slate-800 active:border-red-500 flex flex-col items-center justify-center transition active:scale-95">
+        <span class="text-[10px] text-slate-400 font-bold">PADDLE DOWN</span>
+        <span class="font-digital text-xl font-black text-red-400">- DOWN</span>
+        <span class="text-[9px] text-slate-500 mt-0.5">오토 레브매칭 블립</span>
+      </button>
+
+      <button onclick="toggleEnginePower()" class="col-span-1 h-full rounded-2xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-[11px] text-slate-400 font-bold active:scale-95">
+        <span id="powerIcon">⚡</span>
+        <span id="powerText">OFF</span>
+      </button>
+
+      <button onpointerdown="triggerShiftUp()" class="col-span-3 py-4 rounded-2xl bg-slate-900 active:bg-sky-950 border-2 border-slate-800 active:border-sky-500 flex flex-col items-center justify-center transition active:scale-95">
+        <span class="text-[10px] text-slate-400 font-bold">PADDLE UP</span>
+        <span class="font-digital text-xl font-black text-sky-400">UP +</span>
+        <span class="text-[9px] text-slate-500 mt-0.5">ZF8 시프트 팝 폭발</span>
+      </button>
+    </div>
+
+    <!-- 하단 상태 표시줄: 컨트롤러 및 키설정 -->
+    <div class="flex items-center justify-between text-[11px] px-1 text-slate-400">
+      <button onclick="openKeyModal()" class="hover:text-sky-400 underline font-semibold">
+        🎛️ 패드/버튼 키 맵핑
+      </button>
+      <span id="gamepadStatus">🎮 패드 대기중 (버튼 클릭)</span>
+      <span id="popStatus" class="text-red-400 font-black">💥 스포츠플러스 팝앤뱅</span>
+    </div>
+  </footer>
+
+  <!-- 4. OBD2 블루투스 스캐너 선택 모달 (갤럭시/안드로이드 크롬 최적화) -->
+  <div id="obdModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 w-full max-w-sm space-y-3.5 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></span>
+          <h3 class="font-bold text-sm text-white">차량 OBD2 블루투스 스캐너 선택</h3>
+        </div>
+        <button onclick="closeOBDModal()" class="text-slate-400 text-lg font-bold px-1.5">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-300 leading-relaxed">
+        차량 OBD 포트에 꽂힌 스캐너를 선택해 연결합니다. 아래 버튼을 누르면 블루투스 기기 목록이 뜹니다.
+      </p>
+
+      <div class="space-y-2">
+        <button onclick="scanOBD(true)" class="w-full py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg">
+          <span>🔍 모든 블루투스 기기에서 OBD 선택 (권장)</span>
+        </button>
+        <button onclick="scanOBD(false)" class="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-xs border border-slate-700 flex items-center justify-center gap-1.5">
+          <span>⚡ OBD 이름 필터 검색 (V-LINK / OBDII / ELM)</span>
+        </button>
+      </div>
+
+      <div class="bg-black/60 rounded-xl p-2.5 font-mono text-[10px] text-slate-300 h-24 overflow-y-auto space-y-1" id="obdTerminal">
+        <div>[대기] 위 스캔 버튼을 누르면 블루투스 기기 선택 창이 열립니다.</div>
+      </div>
+
+      <div class="text-[10px] text-slate-400 border-t border-slate-800/80 pt-2 leading-tight">
+        * 인포카/토크프로 등 다른 OBD 앱이 백그라운드에 켜져 있으면 동글을 독점하므로 종료 후 연결하세요.
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. 키 맵핑 설정 모달 -->
+  <div id="keyModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 w-full max-w-sm space-y-3.5 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h3 class="font-bold text-sm text-white">🎛️ EasySMX X05 패드 & 리모컨 맵핑</h3>
+        <button onclick="closeKeyModal()" class="text-slate-400 text-lg font-bold px-1.5">✕</button>
+      </div>
+      <div class="space-y-2 text-xs">
+        <div class="flex justify-between items-center bg-slate-800/90 p-2.5 rounded-xl">
+          <span>기어 업 (UP +)</span>
+          <div class="flex items-center gap-2">
+            <span id="lblUp" class="font-mono text-sky-400 font-bold">PAD_BTN_5 (RB)</span>
+            <button onclick="startLearn('UP')" class="px-2 py-1 bg-sky-600 text-white rounded-lg font-bold">변경</button>
+          </div>
+        </div>
+        <div class="flex justify-between items-center bg-slate-800/90 p-2.5 rounded-xl">
+          <span>기어 다운 (- DOWN)</span>
+          <div class="flex items-center gap-2">
+            <span id="lblDown" class="font-mono text-red-400 font-bold">PAD_BTN_4 (LB)</span>
+            <button onclick="startLearn('DOWN')" class="px-2 py-1 bg-sky-600 text-white rounded-lg font-bold">변경</button>
+          </div>
+        </div>
+      </div>
+      <div id="learnPrompt" class="hidden text-center py-2 rounded-xl bg-amber-500/20 border border-amber-500 text-amber-300 text-xs font-bold animate-pulse">
+        원하는 패드 버튼이나 키보드/리모컨 키를 누르세요...
+      </div>
+      <button onclick="resetDefaultKeymap()" class="w-full py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold">
+        기본값으로 복원
+      </button>
+    </div>
+  </div>
+
+<script>
+/* =========================================================================
+   1. 물리 변속기 사양 & 엔진 파라미터 (BMW ZF 8HP)
+   ========================================================================= */
+const GEAR_RATIOS = [0, 4.71, 3.14, 2.10, 1.67, 1.29, 1.00, 0.84, 0.67];
+const FINAL_DRIVE = 3.15;
+const TIRE_CIRCUMFERENCE = 2.18; // 255/45R20 외경 (m)
+
+const ENGINES = {
+  S58: { name: 'S58 (M2/M4)', idleRpm: 800, redlineRpm: 7600, cyl: 6, freqMult: 1.0, subVol: 1.15, raspVol: 0.65 },
+  B58: { name: 'B58 (M340i)', idleRpm: 720, redlineRpm: 6800, cyl: 6, freqMult: 0.88, subVol: 1.35, raspVol: 0.42 },
+  V8:  { name: 'V8 8-SPEED', idleRpm: 650, redlineRpm: 7200, cyl: 8, freqMult: 0.74, subVol: 1.50, raspVol: 0.32 }
+};
+
+let selectedEngine = 'S58';
+let selectedDriveMode = 'SPORT_PLUS'; // COMFORT, SPORT, SPORT_PLUS
+let sourceMode = 'GPS'; // GPS, OBD, SIM
+
+let engineOn = false;
+let currentGear = 1;
+let currentSpeedKmh = 0;
+let prevSpeedKmh = 0;
+let currentRpm = 0;
+let targetRpm = 0;
+let throttle = 0; // 0.0 ~ 1.0
+let prevThrottle = 0;
+let revMatchRpm = 0;
+let shiftCutActive = false;
+
+// 오버런 팝앤뱅 제어 변수
+let overrunActive = false;
+let overrunStartTime = 0;
+let nextPopTime = 0;
+
+/* =========================================================================
+   2. 초저지연 하드웨어 가속 사운드 엔진 + 무음 오디오 언락커 (카플레이 대응)
+   ========================================================================= */
+let audioCtx = null;
+let masterGain = null;
+let subOsc = null, mainOsc = null, raspOsc = null;
+let subGain = null, mainGain = null, raspGain = null;
+let mufflerFilter = null;
+let rumbleSource = null;
+let rumbleGain = null;
+let customSampleSource = null;
+let customSampleGain = null;
+let hasCustomSample = false;
+
+function makeSaturationCurve(amount = 55) {
+  const n = 1024;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    curve[i] = Math.tanh(x * (amount / 18)) * 0.85 + Math.sin(x * Math.PI) * 0.15;
+  }
+  return curve;
+}
+
+function unlockiOSCarPlayAudio() {
+  // iOS Safari 및 카플레이 미디어 세션 강제 점유용 무음 WAV 재생
+  const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+  silentAudio.loop = true;
+  silentAudio.play().catch(() => {});
+}
+
+function initAudioSystem() {
+  if (audioCtx) return;
+  unlockiOSCarPlayAudio();
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new AudioContextClass({ latencyHint: 'interactive' });
+
+  masterGain = audioCtx.createGain();
+  masterGain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+
+  // 1) 배기 머플러 공명 챔버 필터
+  mufflerFilter = audioCtx.createBiquadFilter();
+  mufflerFilter.type = 'lowpass';
+  mufflerFilter.frequency.setValueAtTime(450, audioCtx.currentTime);
+  mufflerFilter.Q.setValueAtTime(3.0, audioCtx.currentTime);
+
+  // 2) 아날로그 배기 파이프 포화 왜곡기 (WaveShaper)
+  const pipeDist = audioCtx.createWaveShaper();
+  pipeDist.curve = makeSaturationCurve(65);
+  pipeDist.oversample = '2x';
+
+  // 3) 저역대 서브우퍼 부스트 (35Hz~95Hz 차체 럼블)
+  const subBassShelf = audioCtx.createBiquadFilter();
+  subBassShelf.type = 'lowshelf';
+  subBassShelf.frequency.setValueAtTime(95, audioCtx.currentTime);
+  subBassShelf.gain.setValueAtTime(14, audioCtx.currentTime);
+
+  // 4) 3중 오실레이터 (서브 크랭크 펄스, 주 실린더 폭발, 금속성 배기 배음)
+  subOsc = audioCtx.createOscillator();
+  mainOsc = audioCtx.createOscillator();
+  raspOsc = audioCtx.createOscillator();
+  subOsc.type = 'triangle';
+  mainOsc.type = 'sawtooth';
+  raspOsc.type = 'sawtooth';
+
+  subGain = audioCtx.createGain();
+  mainGain = audioCtx.createGain();
+  raspGain = audioCtx.createGain();
+
+  subGain.gain.setValueAtTime(0.85, audioCtx.currentTime);
+  mainGain.gain.setValueAtTime(0.50, audioCtx.currentTime);
+  raspGain.gain.setValueAtTime(0.30, audioCtx.currentTime);
+
+  // 5) 브라운 노이즈 배기 압력 기류 럼블
+  const bufferSize = audioCtx.sampleRate * 2;
+  const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  let lastVal = 0.0;
+  for (let i = 0; i < bufferSize; i++) {
+    const white = Math.random() * 2 - 1;
+    data[i] = (lastVal + (0.035 * white)) / 1.035;
+    lastVal = data[i];
+    data[i] *= 3.8;
+  }
+  rumbleSource = audioCtx.createBufferSource();
+  rumbleSource.buffer = noiseBuffer;
+  rumbleSource.loop = true;
+
+  const rumbleFilter = audioCtx.createBiquadFilter();
+  rumbleFilter.type = 'bandpass';
+  rumbleFilter.frequency.setValueAtTime(62, audioCtx.currentTime);
+  rumbleFilter.Q.setValueAtTime(1.6, audioCtx.currentTime);
+
+  rumbleGain = audioCtx.createGain();
+  rumbleGain.gain.setValueAtTime(0.95, audioCtx.currentTime);
+
+  // 노드 라우팅 결합
+  subOsc.connect(subGain);
+  mainOsc.connect(mainGain);
+  raspOsc.connect(raspGain);
+
+  subGain.connect(pipeDist);
+  mainGain.connect(pipeDist);
+  raspGain.connect(pipeDist);
+
+  rumbleSource.connect(rumbleFilter);
+  rumbleFilter.connect(rumbleGain);
+  rumbleGain.connect(pipeDist);
+
+  pipeDist.connect(mufflerFilter);
+  mufflerFilter.connect(subBassShelf);
+  subBassShelf.connect(masterGain);
+  masterGain.connect(audioCtx.destination);
+
+  subOsc.start();
+  mainOsc.start();
+  raspOsc.start();
+  rumbleSource.start();
+}
+
+// 실차 영상/오디오 샘플 로더
+async function loadCustomSample(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  initAudioSystem();
+  try {
+    const buf = await file.arrayBuffer();
+    const decoded = await audioCtx.decodeAudioData(buf);
+    if (customSampleSource) {
+      try { customSampleSource.stop(); } catch (e) {}
+    }
+    customSampleSource = audioCtx.createBufferSource();
+    customSampleSource.buffer = decoded;
+    customSampleSource.loop = true;
+
+    customSampleGain = audioCtx.createGain();
+    customSampleGain.gain.value = engineOn ? 1.3 : 0.0;
+
+    customSampleSource.connect(customSampleGain);
+    customSampleGain.connect(audioCtx.destination);
+    customSampleSource.start();
+    hasCustomSample = true;
+    alert(`실차 배기음 샘플(${file.name})이 적용되었습니다!`);
+  } catch (err) {
+    alert("오디오 추출 실패: MP4 영상 또는 MP3/WAV 파일을 선택해주세요.");
+  }
+}
+
+// 자연스러운 다단계 팝앤뱅(Pops & Bangs) 사운드 발생기
+function triggerSinglePop(type = 'CRACK') {
+  if (!audioCtx || !engineOn) return;
+  const now = audioCtx.currentTime;
+
+  document.getElementById('appBody').classList.add('pop-flash');
+  setTimeout(() => document.getElementById('appBody').classList.remove('pop-flash'), 90);
+
+  // 1) 머플러 후적 폭발음 (대역폭 필터링 노이즈)
+  const dur = type === 'GUNSHOT' ? 0.095 : 0.065;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+  const out = buf.getChannelData(0);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.02));
+  }
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buf;
+
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(type === 'GUNSHOT' ? 230 : (125 + Math.random() * 95), now);
+  bp.Q.setValueAtTime(1.3, now);
+
+  const gain = audioCtx.createGain();
+  const vol = type === 'GUNSHOT' ? 2.3 : (1.25 + Math.random() * 0.65);
+  gain.gain.setValueAtTime(vol, now);
+  gain.gain.exponentialRampToValueAtTime(0.01, now + dur);
+
+  noise.connect(bp);
+  bp.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  // 2) 차체를 울리는 서브우퍼 타격음 (82Hz -> 26Hz)
+  const sub = audioCtx.createOscillator();
+  const subG = audioCtx.createGain();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(82, now);
+  sub.frequency.exponentialRampToValueAtTime(26, now + dur);
+
+  subG.gain.setValueAtTime(type === 'GUNSHOT' ? 2.6 : 1.55, now);
+  subG.gain.exponentialRampToValueAtTime(0.01, now + dur);
+
+  sub.connect(subG);
+  subG.connect(audioCtx.destination);
+
+  noise.start(now);
+  sub.start(now);
+  sub.stop(now + dur + 0.02);
+}
+
+/* =========================================================================
+   3. 스마트폰 실시간 GPS 속도 연동 + 가속도 센서 융합 (아이폰/갤럭시 완벽 호환)
+   ========================================================================= */
+let gpsWatchId = null;
+let lastGpsLat = null;
+let lastGpsLon = null;
+let lastGpsTimestamp = null;
+
+function haversineDistMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function startGPSTracking() {
+  if (!navigator.geolocation) {
+    document.getElementById('gpsPill').textContent = 'GPS 미지원';
+    return;
+  }
+
+  if ('wakeLock' in navigator) {
+    navigator.wakeLock.request('screen').catch(() => {});
+  }
+
+  if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const now = pos.timestamp || Date.now();
+      let calculatedSpeed = null;
+
+      // 1) 네이티브 도플러 속도 우선 사용
+      if (pos.coords.speed !== null && !isNaN(pos.coords.speed) && pos.coords.speed > 0.2) {
+        calculatedSpeed = pos.coords.speed * 3.6;
+      }
+      // 2) coords.speed가 null이거나 0일 때 Haversine 좌표 거리 변화율로 속도 산출
+      else if (lastGpsLat !== null && lastGpsLon !== null && lastGpsTimestamp !== null) {
+        const dt = (now - lastGpsTimestamp) / 1000;
+        if (dt >= 0.35 && dt <= 8.0) {
+          const dist = haversineDistMeters(lastGpsLat, lastGpsLon, pos.coords.latitude, pos.coords.longitude);
+          if (dist > 0.45) {
+            calculatedSpeed = (dist / dt) * 3.6;
+          } else {
+            calculatedSpeed = 0;
+          }
+        }
+      }
+
+      lastGpsLat = pos.coords.latitude;
+      lastGpsLon = pos.coords.longitude;
+      lastGpsTimestamp = now;
+
+      if (calculatedSpeed !== null && !isNaN(calculatedSpeed) && isFinite(calculatedSpeed)) {
+        if (sourceMode === 'GPS') {
+          prevSpeedKmh = currentSpeedKmh;
+          currentSpeedKmh = Math.round(calculatedSpeed);
+
+          // 속도 변화량으로 실제 차량 악셀 개도율/오프 상태 추정
+          const dSpeed = currentSpeedKmh - prevSpeedKmh;
+          if (dSpeed > 0.3) {
+            throttle = Math.min(1.0, 0.28 + dSpeed * 0.18);
+          } else if (dSpeed < -0.4) {
+            throttle = 0.0; // 감속/악셀 오프 시 즉각 팝앤뱅 유도
+          } else {
+            throttle = currentSpeedKmh > 5 ? 0.16 : 0.0;
+          }
+        }
+      }
+
+      const acc = Math.round(pos.coords.accuracy || 0);
+      document.getElementById('gpsPill').textContent = `수신중(±${acc}m)`;
+      document.getElementById('gpsPill').className = 'text-[9px] text-emerald-300 font-bold';
+    },
+    (err) => {
+      document.getElementById('gpsPill').textContent = '위치권한 허용필요';
+      document.getElementById('gpsPill').className = 'text-[9px] text-red-300 font-bold';
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 6000 }
+  );
+}
+
+/* =========================================================================
+   4. 차량 OBD2 (BLE) 스캐너 연동 엔진 (모든 BLE 기기 직접 선택 + 전기차 대응)
+   ========================================================================= */
+let obdBluetoothDevice = null;
+let obdTxChar = null;
+let obdRxChar = null;
+let obdBuffer = "";
+let obdPollTimer = null;
+let obdPending = false;
+let obdPedalSupported = false;
+
+function logOBDTerm(msg) {
+  const t = document.getElementById('obdTerminal');
+  if (!t) return;
+  const line = document.createElement('div');
+  line.textContent = `> ${msg}`;
+  t.appendChild(line);
+  t.scrollTop = t.scrollHeight;
+}
+
+function openOBDModal() {
+  document.getElementById('obdModal').classList.remove('hidden');
+}
+function closeOBDModal() {
+  document.getElementById('obdModal').classList.add('hidden');
+}
+
+async function scanOBD(acceptAll = true) {
+  if (!navigator.bluetooth) {
+    alert("현재 브라우저는 Web Bluetooth를 지원하지 않습니다.
+안드로이드 크롬(Chrome) 브라우저에서 실행해주세요.");
+    return;
+  }
+
+  try {
+    logOBDTerm("블루투스 스캐너 선택 창 호출 중...");
+
+    const ALL_OBD_SERVICES = [
+      '0000fff0-0000-1000-8000-00805f9b34fb',
+      '0000ffe0-0000-1000-8000-00805f9b34fb',
+      '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+      '000018f0-0000-1000-8000-00805f9b34fb',
+      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+      '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+      '00001101-0000-1000-8000-00805f9b34fb'
+    ];
+
+    let options = {};
+    if (acceptAll) {
+      options = {
+        acceptAllDevices: true,
+        optionalServices: ALL_OBD_SERVICES
+      };
+    } else {
+      options = {
+        filters: [
+          { namePrefix: 'OBD' }, { namePrefix: 'V-LINK' }, { namePrefix: 'Vlink' },
+          { namePrefix: 'IOS-Vlink' }, { namePrefix: 'VGATE' }, { namePrefix: 'ELM' },
+          { namePrefix: 'Viecar' }, { namePrefix: 'KONNWEI' }, { namePrefix: 'Carista' }
+        ],
+        optionalServices: ALL_OBD_SERVICES
+      };
+    }
+
+    obdBluetoothDevice = await navigator.bluetooth.requestDevice(options);
+    logOBDTerm(`기기 선택됨: ${obdBluetoothDevice.name || 'BLE OBD 스캐너'}`);
+
+    const server = await obdBluetoothDevice.gatt.connect();
+    logOBDTerm("GATT 서버 접속 성공. TX/RX 채널 탐색 중...");
+
+    const services = await server.getPrimaryServices();
+    obdTxChar = null;
+    obdRxChar = null;
+
+    for (const s of services) {
+      const chars = await s.getCharacteristics();
+      for (const c of chars) {
+        if (c.properties.notify || c.properties.indicate) obdRxChar = c;
+        if (c.properties.write || c.properties.writeWithoutResponse) obdTxChar = c;
+      }
+      if (obdTxChar && obdRxChar) break;
+    }
+
+    if (!obdTxChar || !obdRxChar) {
+      throw new Error("OBD 시리얼 TX/RX 채널을 찾지 못했습니다.");
+    }
+
+    await obdRxChar.startNotifications();
+    obdRxChar.addEventListener('characteristicvaluechanged', handleOBDData);
+
+    logOBDTerm("ELM327 고속 모드 초기화 전송 (ATE0, ATL0, ATS0)");
+    await sendOBDCommand("ATZ");
+    await new Promise(r => setTimeout(r, 380));
+    await sendOBDCommand("ATE0");
+    await sendOBDCommand("ATL0");
+    await sendOBDCommand("ATS0");
+    await sendOBDCommand("ATSP0");
+
+    switchSourceMode('OBD');
+    document.getElementById('obdPill').textContent = obdBluetoothDevice.name || 'OBD 연결됨';
+    document.getElementById('obdPill').className = 'text-[9px] text-emerald-300 font-bold';
+    closeOBDModal();
+
+    startOBDPollLoop();
+  } catch (err) {
+    logOBDTerm(`오류: ${err.message}`);
+  }
+}
+
+async function sendOBDCommand(cmd) {
+  if (!obdTxChar) return;
+  const enc = new TextEncoder().encode(cmd + "");
+  if (obdTxChar.properties.writeWithoutResponse) {
+    await obdTxChar.writeValueWithoutResponse(enc);
+  } else {
+    await obdTxChar.writeValue(enc);
+  }
+}
+
+let obdCycle = 0;
+function startOBDPollLoop() {
+  if (obdPollTimer) clearInterval(obdPollTimer);
+  obdPollTimer = setInterval(async () => {
+    if (!obdTxChar || obdPending || sourceMode !== 'OBD') return;
+    obdPending = true;
+    obdCycle = (obdCycle + 1) % 2;
+    const cmd = obdCycle === 0 ? "010D1" : "01491";
+    await sendOBDCommand(cmd).catch(() => {});
+    setTimeout(() => { obdPending = false; }, 55);
+  }, 45);
+}
+
+function handleOBDData(event) {
+  const text = new TextDecoder().decode(event.target.value);
+  obdBuffer += text;
+  if (obdBuffer.includes(">")) {
+    const clean = obdBuffer.replace(/[
+\s>]/g, "").toUpperCase();
+    obdBuffer = "";
+    obdPending = false;
+
+    // 1) 차량 실시간 속도 (010D)
+    if (clean.includes("410D")) {
+      const idx = clean.indexOf("410D") + 4;
+      const spd = parseInt(clean.substr(idx, 2), 16);
+      if (!isNaN(spd)) {
+        prevSpeedKmh = currentSpeedKmh;
+        currentSpeedKmh = spd;
+        // 전기차 등 0149 미지원 시 속도 변화율로 스로틀 자동 추정
+        if (!obdPedalSupported) {
+          const dSpd = currentSpeedKmh - prevSpeedKmh;
+          if (dSpd > 0) throttle = Math.min(1.0, 0.3 + dSpd * 0.22);
+          else if (dSpd < 0) throttle = 0.0;
+          else throttle = currentSpeedKmh > 4 ? 0.18 : 0.0;
+        }
+      }
+    }
+    // 2) 가속 페달 포지션 (0149)
+    else if (clean.includes("4149")) {
+      const idx = clean.indexOf("4149") + 4;
+      const raw = parseInt(clean.substr(idx, 2), 16);
+      if (!isNaN(raw)) {
+        obdPedalSupported = true;
+        throttle = Math.min(1.0, Math.max(0.0, (raw - 32) / 190));
+      }
+    }
+  }
+}
+
+/* =========================================================================
+   5. 변속 및 오버런(스포츠플러스 악셀 오프 팝앤뱅) 물리 연산
+   ========================================================================= */
+function triggerShiftUp() {
+  if (!engineOn) startEngineAudio();
+  if (currentGear < 8) {
+    currentGear++;
+    shiftCutActive = true;
+    setTimeout(() => { shiftCutActive = false; }, 75);
+
+    if (currentRpm > 2500 && selectedDriveMode !== 'COMFORT') {
+      triggerSinglePop('GUNSHOT');
+    }
+  }
+}
+
+function triggerShiftDown() {
+  if (!engineOn) startEngineAudio();
+  if (currentGear > 1) {
+    currentGear--;
+    revMatchRpm = 1150;
+    if (selectedDriveMode === 'SPORT_PLUS') {
+      setTimeout(() => triggerSinglePop('CRACK'), 130);
+      setTimeout(() => triggerSinglePop('CRACK'), 220);
+    }
+  }
+}
+
+/* =========================================================================
+   6. 60FPS 메인 루프 (사운드 피치 & 팝앤뱅 스케줄러)
+   ========================================================================= */
+let simHoldingAccel = false;
+let simHoldingBrake = false;
+
+function updatePhysics() {
+  pollGamepads();
+
+  const spec = ENGINES[selectedEngine];
+
+  if (engineOn) {
+    if (sourceMode === 'SIM') {
+      if (simHoldingAccel) {
+        throttle = Math.min(1.0, throttle + 0.08);
+        currentSpeedKmh = Math.min(260, currentSpeedKmh + (1.2 / Math.sqrt(currentGear)));
+      } else if (simHoldingBrake) {
+        throttle = 0;
+        currentSpeedKmh = Math.max(0, currentSpeedKmh - 2.2);
+      } else {
+        throttle = Math.max(0, throttle - 0.05);
+        currentSpeedKmh = Math.max(0, currentSpeedKmh - 0.3);
+      }
+    }
+
+    // 🔥 SPORT PLUS 악셀 오프 시 자연스러운 다단계 팝앤뱅 감지
+    const nowMs = performance.now();
+    if (selectedDriveMode === 'SPORT_PLUS') {
+      if (prevThrottle > 0.25 && throttle < 0.08 && currentRpm > 2300) {
+        overrunActive = true;
+        overrunStartTime = nowMs;
+        nextPopTime = nowMs + 85;
+      }
+
+      if (throttle > 0.15) {
+        overrunActive = false;
+      }
+
+      if (overrunActive) {
+        const elapsed = nowMs - overrunStartTime;
+        if (elapsed < 1900 && currentRpm > 1750) {
+          if (nowMs >= nextPopTime) {
+            const isInitial = elapsed < 340;
+            triggerSinglePop(isInitial ? 'GUNSHOT' : 'CRACK');
+            nextPopTime = nowMs + (isInitial ? (115 + Math.random() * 80) : (65 + Math.random() * 115));
+          }
+        } else {
+          overrunActive = false;
+        }
+      }
+    } else {
+      overrunActive = false;
+    }
+    prevThrottle = throttle;
+
+    // 차속과 기어비에 따른 가상 물리 RPM 계산
+    const wheelRpm = (currentSpeedKmh * 1000 / 60) / TIRE_CIRCUMFERENCE;
+    const gearRpm = wheelRpm * GEAR_RATIOS[currentGear] * FINAL_DRIVE;
+    revMatchRpm *= 0.88;
+
+    const baseRpm = Math.max(spec.idleRpm, gearRpm + revMatchRpm);
+    targetRpm = baseRpm + (currentSpeedKmh < 3 ? throttle * 4500 : throttle * 320);
+    targetRpm = Math.min(spec.redlineRpm, targetRpm);
+
+    currentRpm += (targetRpm - currentRpm) * 0.22;
+
+    if (currentRpm >= spec.redlineRpm - 100) {
+      currentRpm -= 240;
+    }
+
+    if (audioCtx && subOsc) {
+      const now = audioCtx.currentTime;
+      const baseFreq = (currentRpm / 60) * (spec.cyl / 2) * spec.freqMult;
+
+      subOsc.frequency.setTargetAtTime(baseFreq * 0.5, now, 0.02);
+      mainOsc.frequency.setTargetAtTime(baseFreq, now, 0.02);
+      raspOsc.frequency.setTargetAtTime(baseFreq * 2.0, now, 0.02);
+
+      subGain.gain.setTargetAtTime(spec.subVol, now, 0.03);
+      raspGain.gain.setTargetAtTime(spec.raspVol * (0.3 + (currentRpm / spec.redlineRpm) * 0.9), now, 0.03);
+
+      let valveFreq = 220 + (currentRpm / spec.redlineRpm) * 1650;
+      if (selectedDriveMode === 'SPORT_PLUS') valveFreq += 650;
+      valveFreq += throttle * 850;
+      mufflerFilter.frequency.setTargetAtTime(valveFreq, now, 0.03);
+
+      if (shiftCutActive) {
+        masterGain.gain.setTargetAtTime(0.04, now, 0.01);
+      } else {
+        const vol = hasCustomSample ? 0.18 : (0.5 + throttle * 0.5);
+        masterGain.gain.setTargetAtTime(vol, now, 0.03);
+      }
+
+      if (customSampleSource) {
+        const rate = 0.65 + (currentRpm / spec.redlineRpm) * 1.45;
+        customSampleSource.playbackRate.setTargetAtTime(rate, now, 0.03);
+      }
+    }
+  } else {
+    currentRpm = 0;
+    if (audioCtx && masterGain) {
+      masterGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.05);
+    }
+  }
+
+  document.getElementById('hudGear').textContent = currentGear;
+  document.getElementById('hudRpm').textContent = Math.round(currentRpm).toLocaleString();
+  document.getElementById('hudSpeed').textContent = Math.round(currentSpeedKmh);
+  document.getElementById('hudThrottle').style.width = `${Math.round(throttle * 100)}%`;
+
+  const ratio = Math.min(1.0, currentRpm / spec.redlineRpm);
+  const offset = 471 - (471 * ratio);
+  const arc = document.getElementById('gaugeArc');
+  arc.style.strokeDashoffset = offset;
+  arc.style.stroke = ratio > 0.85 ? '#e4002b' : (ratio > 0.65 ? '#f59e0b' : '#0066b1');
+
+  requestAnimationFrame(updatePhysics);
+}
+
+/* =========================================================================
+   7. 게임패드(EasySMX X05) & 키보드 매핑
+   ========================================================================= */
+let keyMap = JSON.parse(localStorage.getItem('m_sound_keymap_v3')) || {
+  UP: { type: 'PAD', code: 5, label: 'PAD_BTN_5 (RB)' },
+  DOWN: { type: 'PAD', code: 4, label: 'PAD_BTN_4 (LB)' }
+};
+let learnTarget = null;
+let prevPadState = {};
+
+function startLearn(target) {
+  learnTarget = target;
+  document.getElementById('learnPrompt').classList.remove('hidden');
+}
+function resetDefaultKeymap() {
+  keyMap = {
+    UP: { type: 'PAD', code: 5, label: 'PAD_BTN_5 (RB)' },
+    DOWN: { type: 'PAD', code: 4, label: 'PAD_BTN_4 (LB)' }
+  };
+  localStorage.setItem('m_sound_keymap_v3', JSON.stringify(keyMap));
+  document.getElementById('lblUp').textContent = keyMap.UP.label;
+  document.getElementById('lblDown').textContent = keyMap.DOWN.label;
+}
+function openKeyModal() {
+  document.getElementById('lblUp').textContent = keyMap.UP.label;
+  document.getElementById('lblDown').textContent = keyMap.DOWN.label;
+  document.getElementById('keyModal').classList.remove('hidden');
+}
+function closeKeyModal() {
+  learnTarget = null;
+  document.getElementById('learnPrompt').classList.add('hidden');
+  document.getElementById('keyModal').classList.add('hidden');
+}
+
+window.addEventListener('keydown', (e) => {
+  if (learnTarget) {
+    e.preventDefault();
+    keyMap[learnTarget] = { type: 'KEY', code: e.code, label: `KEY_${e.code}` };
+    localStorage.setItem('m_sound_keymap_v3', JSON.stringify(keyMap));
+    closeKeyModal();
+    return;
+  }
+  if (e.repeat) return;
+  if (e.code === 'KeyE' || e.code === 'ArrowUp' || (keyMap.UP.type === 'KEY' && e.code === keyMap.UP.code)) triggerShiftUp();
+  if (e.code === 'KeyQ' || e.code === 'ArrowDown' || (keyMap.DOWN.type === 'KEY' && e.code === keyMap.DOWN.code)) triggerShiftDown();
+  if (e.code === 'KeyW' || e.code === 'Space') simHoldingAccel = true;
+});
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'KeyW' || e.code === 'Space') simHoldingAccel = false;
+});
+
+function pollGamepads() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const pad = pads[0] || pads[1] || pads[2] || pads[3];
+  if (!pad) return;
+
+  document.getElementById('gamepadStatus').textContent = `🟢 패드 연결됨`;
+  document.getElementById('gamepadStatus').className = 'text-emerald-400 font-bold';
+
+  pad.buttons.forEach((btn, idx) => {
+    const pressed = btn.pressed || btn.value > 0.6;
+    const was = !!prevPadState[idx];
+
+    if (pressed && !was) {
+      if (learnTarget) {
+        keyMap[learnTarget] = { type: 'PAD', code: idx, label: `PAD_BTN_${idx}` };
+        localStorage.setItem('m_sound_keymap_v3', JSON.stringify(keyMap));
+        closeKeyModal();
+      } else {
+        if (keyMap.UP.type === 'PAD' && keyMap.UP.code === idx) triggerShiftUp();
+        if (keyMap.DOWN.type === 'PAD' && keyMap.DOWN.code === idx) triggerShiftDown();
+      }
+    }
+    prevPadState[idx] = pressed;
+  });
+
+  if (pad.buttons[7] && pad.buttons[7].value > 0.05) {
+    throttle = pad.buttons[7].value;
+    if (sourceMode === 'SIM') {
+      currentSpeedKmh = Math.min(260, currentSpeedKmh + throttle * 1.5);
+    }
+  }
+}
+
+/* =========================================================================
+   8. UI 컨트롤 및 배포 유틸리티
+   ========================================================================= */
+function startEngineAudio() {
+  initAudioSystem();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  engineOn = true;
+  document.getElementById('startCover').classList.add('hidden');
+  document.getElementById('powerText').textContent = 'ON';
+  document.getElementById('powerIcon').textContent = '🔥';
+  if (customSampleGain) customSampleGain.gain.value = 1.3;
+
+  startGPSTracking();
+  revMatchRpm = 1450;
+  setTimeout(() => triggerSinglePop('GUNSHOT'), 180);
+}
+
+function toggleEnginePower() {
+  if (!engineOn) {
+    startEngineAudio();
+  } else {
+    engineOn = false;
+    document.getElementById('startCover').classList.remove('hidden');
+    document.getElementById('powerText').textContent = 'OFF';
+    document.getElementById('powerIcon').textContent = '⚡';
+    if (customSampleGain) customSampleGain.gain.value = 0.0;
+  }
+}
+
+function setEngine(name) {
+  selectedEngine = name;
+  ['S58', 'B58', 'V8'].forEach(k => {
+    const btn = document.getElementById('btn' + k);
+    btn.className = (k === name)
+      ? 'py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white transition'
+      : 'py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition';
+  });
+}
+
+function setDriveMode(mode) {
+  selectedDriveMode = mode;
+  ['Comfort', 'Sport', 'SportPlus'].forEach(id => {
+    const btn = document.getElementById('mode' + id);
+    btn.className = 'px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-400';
+  });
+
+  if (mode === 'COMFORT') {
+    document.getElementById('modeComfort').className = 'px-2 py-1 rounded-lg text-[10px] font-bold bg-sky-700 text-white';
+    document.getElementById('popStatus').textContent = '🔇 팝앤뱅 꺼짐';
+    document.getElementById('popStatus').className = 'text-slate-500 font-semibold';
+  } else if (mode === 'SPORT') {
+    document.getElementById('modeSport').className = 'px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-600 text-white';
+    document.getElementById('popStatus').textContent = '⚡ 스포츠 시프트팝';
+    document.getElementById('popStatus').className = 'text-amber-400 font-bold';
+  } else {
+    document.getElementById('modeSportPlus').className = 'px-2 py-1 rounded-lg text-[10px] font-bold bg-red-600 text-white shadow-[0_0_12px_rgba(228,0,43,0.5)]';
+    document.getElementById('popStatus').textContent = '💥 스포츠플러스 팝앤뱅';
+    document.getElementById('popStatus').className = 'text-red-400 font-black animate-pulse';
+  }
+}
+
+function switchSourceMode(mode) {
+  sourceMode = mode;
+  document.getElementById('sourceTag').textContent = mode;
+  document.getElementById('simPedalBox').classList.toggle('hidden', mode !== 'SIM');
+
+  document.getElementById('tabGPS').className = mode === 'GPS'
+    ? 'py-2 rounded-xl text-xs font-bold bg-sky-600 text-white border border-sky-400/40 flex flex-col items-center justify-center'
+    : 'py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 border border-slate-800 flex flex-col items-center justify-center';
+
+  document.getElementById('tabOBD').className = mode === 'OBD'
+    ? 'py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white border border-emerald-400/40 flex flex-col items-center justify-center'
+    : 'py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 border border-slate-800 flex flex-col items-center justify-center';
+
+  document.getElementById('tabSIM').className = mode === 'SIM'
+    ? 'py-2 rounded-xl text-xs font-bold bg-amber-600 text-white border border-amber-400/40 flex flex-col items-center justify-center'
+    : 'py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 border border-slate-800 flex flex-col items-center justify-center';
+
+  if (mode === 'GPS') startGPSTracking();
+}
+
+function copyGithubCode() {
+  const html = document.documentElement.outerHTML;
+  navigator.clipboard.writeText(html).then(() => {
+    alert("전체 HTML 코드가 복사되었습니다! GitHub 저장소의 index.html에 그대로 붙여넣으세요.");
+  });
+}
+
+const accel = document.getElementById('simAccel');
+const brake = document.getElementById('simBrake');
+accel.addEventListener('pointerdown', () => { if (!engineOn) startEngineAudio(); simHoldingAccel = true; });
+accel.addEventListener('pointerup', () => { simHoldingAccel = false; });
+accel.addEventListener('pointerleave', () => { simHoldingAccel = false; });
+brake.addEventListener('pointerdown', () => { simHoldingBrake = true; });
+brake.addEventListener('pointerup', () => { simHoldingBrake = false; });
+brake.addEventListener('pointerleave', () => { simHoldingBrake = false; });
+
+window.addEventListener('DOMContentLoaded', () => {
+  startGPSTracking();
+  requestAnimationFrame(updatePhysics);
+});
+</script>
+</body>
+</html>
